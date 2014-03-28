@@ -143,9 +143,14 @@ window.svgPanZoom = (function(document) {
    */
   function getRelativeMousePoint(evt) {
     var svg = (evt.target.tagName === 'svg' || evt.target.tagName === 'SVG') ? evt.target : evt.target.ownerSVGElement || evt.target.correspondingElement.ownerSVGElement;
-    var point = svg.createSVGPoint();
-    point.x = evt.clientX
-    point.y = evt.clientY;
+    return getRelativePoint(svg, evt.clientX, evt.clientY);
+  }
+  
+  /**
+   * Get an SVGPoint of the given co-ordinates, relative to the SVG element.
+   */
+  function getRelativePoint(svg, x,y){
+    var point = getPoint(svg, x, y);
     point = point.matrixTransform(svg.getScreenCTM().inverse());
     return point;
   }
@@ -153,10 +158,15 @@ window.svgPanZoom = (function(document) {
   /**
    * Instance an SVGPoint object with given event coordinates.
    */
-
   function getEventPoint(evt) {
     var svg = (evt.target.tagName === 'svg' || evt.target.tagName === 'SVG') ? evt.target : evt.target.ownerSVGElement || evt.target.correspondingElement.ownerSVGElement;
-
+    return getPoint(svg, evt.clientX, evt.clientY);
+  }
+  
+  /**
+   * Instance an SVGPoint object with given coordinates.
+   */
+  function getPoint(svg, x, y){
     var p = svg.createSVGPoint();
 
     p.x = evt.clientX;
@@ -374,28 +384,21 @@ window.svgPanZoom = (function(document) {
   }
 
   function zoomIn(selector) {
-
-    // TODO zoom origin isn't center of screen
-
     getSvg(selector, function(err, svg) {
-      var viewport = getViewport(svg);
-      viewportCTM.a = viewportCTM.d = (1 + zoomScaleSensitivity) * viewportCTM.a;
-      if ( viewportCTM.a > maxZoom ) { viewportCTM.a = viewportCTM.d = maxZoom ; }
-      setCTM(viewport, viewportCTM);
-      if (onZoom) { onZoom(viewportCTM.a); }
+      var boundingClientRect = svg.getBoundingClientRect();
+      var scale = (1 + zoomScaleSensitivity);
+      var point = getRelativePoint(svg, boundingClientRect.width/2, boundingClientRect.height/2)
+      zoomOnPoint(svg, scale, point);
     });
   }
 
   function zoomOut(selector) {
 
-    // TODO zoom origin isn't center of screen
-
     getSvg(selector, function(err, svg) {
-      var viewport = getViewport(svg);
-      viewportCTM.a = viewportCTM.d = (1/(1 + zoomScaleSensitivity)) * viewportCTM.a;
-      if ( viewportCTM.a < minZoom ) { viewportCTM.a = viewportCTM.d = minZoom ; }
-      setCTM(viewport, viewportCTM);
-      if (onZoom) { onZoom(viewportCTM.a); }
+      var boundingClientRect = svg.getBoundingClientRect();
+      var scale = (1/(1 + zoomScaleSensitivity));
+      var point = getRelativePoint(svg, boundingClientRect.width/2, boundingClientRect.height/2)
+      zoomOnPoint(svg, scale, point);
     });
   }
 
@@ -449,7 +452,15 @@ window.svgPanZoom = (function(document) {
     p = p.matrixTransform(g.getCTM().inverse());
 
     // Compute new scale matrix in current mouse position
-    var k = svg.createSVGMatrix().translate(p.x, p.y).scale(z).translate(-p.x, -p.y);
+    zoomOnPoint(svg, z, p);
+    if(typeof(stateTf) == 'undefined')
+      stateTf = g.getCTM().inverse();
+
+    stateTf = stateTf.multiply(k.inverse()); 
+  }
+  
+  function zoomOnPoint(svg, scale, point){
+    var k = svg.createSVGMatrix().translate(point.x, point.y).scale(scale).translate(-point.x, -point.y);
     var wasZoom = g.getCTM();
     var setZoom = g.getCTM().multiply(k);
 
@@ -457,10 +468,6 @@ window.svgPanZoom = (function(document) {
     if ( setZoom.a > maxZoom ) { setZoom.a = setZoom.d = wasZoom.a; }
     if ( setZoom.a != wasZoom.a ) { setCTM(g, setZoom); }
 
-    if(typeof(stateTf) == 'undefined')
-      stateTf = g.getCTM().inverse();
-
-    stateTf = stateTf.multiply(k.inverse());
     if (onZoom) { onZoom(g.getCTM().a); }
   }
 
